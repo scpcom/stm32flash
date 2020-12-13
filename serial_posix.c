@@ -128,8 +128,8 @@ static port_err_t serial_setup(serial_t *h, const serial_baud_t baud,
 
 	switch (parity) {
 		case SERIAL_PARITY_NONE: port_parity = 0; break;
-		case SERIAL_PARITY_EVEN: port_parity = INPCK | PARENB; break;
-		case SERIAL_PARITY_ODD:  port_parity = INPCK | PARENB | PARODD; break;
+		case SERIAL_PARITY_EVEN: port_parity = PARENB; break;
+		case SERIAL_PARITY_ODD:  port_parity = PARENB | PARODD; break;
 
 		default:
 			return PORT_ERR_UNKNOWN;
@@ -149,6 +149,9 @@ static port_err_t serial_setup(serial_t *h, const serial_baud_t baud,
 #else /* __sun */
 	h->newtio.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR
 			       | IGNCR | ICRNL | IXON);
+        if (port_parity)
+                h->newtio.c_iflag |= INPCK;
+
 	h->newtio.c_oflag &= ~OPOST;
 	h->newtio.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
 	h->newtio.c_cflag &= ~(CSIZE | PARENB);
@@ -182,11 +185,18 @@ static port_err_t serial_setup(serial_t *h, const serial_baud_t baud,
 	if (tcsetattr(h->fd, TCSANOW, &h->newtio) != 0)
 		return PORT_ERR_UNKNOWN;
 
+/* this check fails on CDC-ACM devices, bits 16 and 17 of cflag differ!
+ * it has been disabled below for now -jcw, 2015-11-09
+    if (settings.c_cflag != h->newtio.c_cflag)
+        fprintf(stderr, "c_cflag mismatch %lx\n",
+                settings.c_cflag ^ h->newtio.c_cflag);
+ */
+
 	/* confirm they were set */
 	tcgetattr(h->fd, &settings);
 	if (settings.c_iflag != h->newtio.c_iflag ||
 	    settings.c_oflag != h->newtio.c_oflag ||
-	    settings.c_cflag != h->newtio.c_cflag ||
+	  //settings.c_cflag != h->newtio.c_cflag ||
 	    settings.c_lflag != h->newtio.c_lflag)
 		return PORT_ERR_UNKNOWN;
 
@@ -198,18 +208,34 @@ static port_err_t serial_setup(serial_t *h, const serial_baud_t baud,
 	return PORT_ERR_OK;
 }
 
+/* 
+ * Roger clark.
+ * This function is no longer used. But has just been commented out in case it needs 
+ * to be reinstated in the future
+ 
 static int startswith(const char *haystack, const char *needle) {
 	return strncmp(haystack, needle, strlen(needle)) == 0;
 }
+*/
 
 static int is_tty(const char *path) {
 	char resolved[PATH_MAX];
 
 	if(!realpath(path, resolved)) return 0;
+	
 
+	/*
+	 * Roger Clark
+	 * Commented out this check, because on OSX some devices are /dev/cu
+	 * and some users use symbolic links to devices, hence the name may not even start
+	 * with /dev
+	 
 	if(startswith(resolved, "/dev/tty")) return 1;
-
+	
 	return 0;
+	*/
+	
+	return 1;
 }
 
 static port_err_t serial_posix_open(struct port_interface *port,
